@@ -224,7 +224,10 @@ export class SharedContextManager {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      const isSingleton = /ProcessSingleton|SingletonLock|profile is already in use/i.test(msg);
+      const isSingleton =
+        /ProcessSingleton|SingletonLock|profile is already in use/i.test(msg) ||
+        /Target page, context or browser has been closed/i.test(msg) ||
+        /code[=:\s]*21\b/i.test(msg);
       if (strategy === "single" || !isSingleton) {
         // hard fail
         if (isSingleton && strategy === "single") {

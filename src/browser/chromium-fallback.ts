@@ -27,8 +27,9 @@ const CHANNEL_FAILURE_PATTERNS: readonly RegExp[] = [
   /chrome.*exited immediately/i,
   /executable doesn't exist/i,
   /executable.*missing/i,
-  /code 21/i,
-  /code -?6/i,
+  // Matches "code 21", "code: 21", "code=21", "exitCode=21", "exitCode: 21", ...
+  /code[=:\s]*21\b/i,
+  /code[=:\s]*-?6\b/i,
 ];
 
 export function getPreferredChannel(): BrowserChannel {

@@ -38,6 +38,8 @@ import {
   type DownloadAudioResult,
 } from "../notebooklm/audio.js";
 import { CONFIG } from "../config.js";
+import path from "node:path";
+import { Selectors } from "../notebooklm/selectors.js";
 import { log } from "../utils/logger.js";
 import type { SessionInfo, ProgressCallback } from "../types.js";
 import { RateLimitError } from "../errors.js";
@@ -431,6 +433,22 @@ export class BrowserSession {
       });
 
       if (!answer) {
+        try {
+          const debugPath = path.join(CONFIG.dataDir, `ask_timeout_${Date.now()}.png`);
+          await page.screenshot({ path: debugPath, fullPage: true });
+          log.warning(`  📸 Debug screenshot saved: ${debugPath}`);
+
+          const containerCount = await page.locator(Selectors.chat.answerContainer).count();
+          const rawLatest = await page
+            .locator(Selectors.chat.latestAnswerText)
+            .last()
+            .innerText({ timeout: 2000 })
+            .catch((e) => `<no text: ${e}>`);
+          log.warning(`  🔍 Debug: answerContainer count=${containerCount}`);
+          log.warning(`  🔍 Debug: latest answer text raw="${rawLatest}"`);
+        } catch (debugErr) {
+          log.warning(`  ⚠️  Debug capture failed: ${debugErr}`);
+        }
         throw new Error("Timeout waiting for response from NotebookLM");
       }
 
