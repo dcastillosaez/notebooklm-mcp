@@ -5,6 +5,46 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`setup_auth` / `re_auth` recover from a locked Chrome profile.** A crashed or
+  abandoned run leaves the whole browser process tree alive, which keeps a lock on
+  the persistent profile directory. Every later `setup_auth` died inside
+  `launchPersistentContext` and reported only "Authentication failed or was
+  cancelled" — in about two seconds, with no hint that the profile was the
+  problem — leaving auth unrecoverable without manually hunting down PIDs. These
+  tools now release the profile before using it and retry the launch once.
+  The 2.0.0 profile-lock fallback covered only the runtime path
+  (`shared-context-manager`), never setup.
+- **Infrastructure errors during setup are no longer swallowed.** `performSetup`
+  collapsed every exception into `false`, which the caller reports as
+  "Authentication failed or was cancelled". That return value means "the user did
+  not finish logging in"; reusing it for launch failures hid the real cause. Such
+  errors now propagate with their message intact.
+- **`show_browser` / `browser_options.show` are honoured by `setup_auth` and
+  `re_auth`.** Both handlers resolved the flag into `CONFIG` but never passed it
+  to `performSetup`, which reads its own parameter — so the options were silently
+  ignored. Setup still defaults to a visible window when nothing is requested.
+- **Windows profile path corrected in the docs.** `env-paths` resolves to
+  `%LOCALAPPDATA%\notebooklm-mcp\Data\`, not `%APPDATA%\notebooklm-mcp\`. The
+  README and a `config.ts` comment both stated the wrong location — the one place
+  where an accurate path matters most when diagnosing a profile lock.
+- Accept `notebook.google.com` alongside `notebooklm.google.com` after Google's
+  rename of NotebookLM.
+
+### Added
+
+- `src/browser/profile-lock.ts` — locate and terminate the browser processes
+  holding a given profile directory. Matches the resolved real path as well as
+  the raw one, since Windows short 8.3 paths (`C:\Users\DAVIDG~1\...`) never
+  compare equal to their expanded form, and covers `headless_shell`, which
+  Playwright uses for headless launches and which a chrome-only process list
+  misses entirely.
+- `npm run verify:profile-lock` — verifies detection and release against a
+  throwaway profile, without touching the real one.
+
 ## [2.0.0] - 2026-04-30
 
 Major release that closes the issue backlog and replaces the brittle parts of

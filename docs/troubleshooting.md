@@ -92,20 +92,40 @@ The error message in v2 lists the correct set.
 
 Symptom: Chrome processes survive after the MCP server exits.
 
-v2 ships a 5-second shutdown watchdog and an aggressive teardown path, so this is rare. If it does happen:
+v2 ships a 5-second shutdown watchdog and an aggressive teardown path, so this is rare. `setup_auth` and `re_auth` also clear these themselves before touching the profile. If you want to check manually, note that the orphan is usually **not** named `chrome.exe`: headless launches run through Playwright's bundled `headless_shell`, so filter by the profile path rather than the process name.
 
-1. Kill the lingering Chromes manually.
-2. Run `cleanup_data` with `preserve_library: true` to remove stale profile locks.
-3. Restart the server.
+```powershell
+# Windows — list anything holding the profile
+Get-CimInstance Win32_Process |
+  Where-Object { $_.CommandLine -match 'notebooklm-mcp\\Data\\chrome_profile' } |
+  Select-Object ProcessId, Name
+```
+
+```bash
+# Linux / macOS
+ps -eo pid,command | grep chrome_profile | grep -v grep
+```
+
+If any survive: kill them, run `cleanup_data` with `preserve_library: true`, and restart the server.
 
 ## Profile lock / `ProcessSingleton` errors
 
-Cause: Another Chrome owns the base profile.
+Cause: Another Chrome still owns the profile directory. On Windows this rarely
+surfaces as a readable `ProcessSingleton` message — you get an opaque
+`exitCode=21` or `Target page, context or browser has been closed` instead.
 
-Fix: The default `NOTEBOOK_PROFILE_STRATEGY=auto` falls back to an isolated per-instance profile. To force isolation always:
+- **`ask_question` and other runtime tools**: the default `NOTEBOOK_PROFILE_STRATEGY=auto` falls back to an isolated per-instance profile. To force isolation always:
+
+  ```bash
+  NOTEBOOK_PROFILE_STRATEGY=isolated npx notebooklm-mcp@latest
+  ```
+
+- **`setup_auth` / `re_auth`**: isolation is not an option here, because the login has to land in the base profile that later runs reuse. Instead these tools terminate whatever holds the profile, then retry the launch once. If processes survive that, the tool now fails with an explicit message naming the profile path and how many processes are still holding it — rather than the generic "Authentication failed or was cancelled", which used to hide this failure entirely.
+
+To verify the recovery mechanism without touching your real profile:
 
 ```bash
-NOTEBOOK_PROFILE_STRATEGY=isolated npx notebooklm-mcp@latest
+npm run verify:profile-lock
 ```
 
 ## Rate limit reached

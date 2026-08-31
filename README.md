@@ -125,7 +125,12 @@ Profile location (env-paths):
 |---|---|
 | Linux | `~/.local/share/notebooklm-mcp/chrome_profile/` |
 | macOS | `~/Library/Application Support/notebooklm-mcp/chrome_profile/` |
-| Windows | `%APPDATA%\notebooklm-mcp\chrome_profile\` |
+| Windows | `%LOCALAPPDATA%\notebooklm-mcp\Data\chrome_profile\` |
+
+If a previous run left a browser alive, it keeps a lock on that directory and
+Chrome cannot reopen it. `setup_auth` and `re_auth` release the profile before
+using it and retry once, so this recovers on its own — see
+[troubleshooting](./docs/troubleshooting.md#profile-lock--processsingleton-errors).
 
 Auth tools:
 

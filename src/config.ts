@@ -16,7 +16,7 @@ import path from "path";
 // Cross-platform data paths (unified without -nodejs suffix)
 // Linux: ~/.local/share/notebooklm-mcp/
 // macOS: ~/Library/Application Support/notebooklm-mcp/
-// Windows: %APPDATA%\notebooklm-mcp\
+// Windows: %LOCALAPPDATA%\notebooklm-mcp\Data\  (env-paths appends "Data" here)
 // IMPORTANT: Pass empty string suffix to disable envPaths' default '-nodejs' suffix!
 const paths = envPaths("notebooklm-mcp", { suffix: "" });
 
