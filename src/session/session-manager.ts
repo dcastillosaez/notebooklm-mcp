@@ -212,6 +212,7 @@ export class SessionManager {
     log.success(
       `✅ Session ${sessionId} closed (${this.sessions.size}/${this.maxSessions} active)`
     );
+    await this.maybeCloseSharedContext();
     return true;
   }
 
@@ -240,6 +241,7 @@ export class SessionManager {
       );
     }
 
+    await this.maybeCloseSharedContext();
     return closed;
   }
 
@@ -266,6 +268,18 @@ export class SessionManager {
       }
     }
     return best;
+  }
+
+  /**
+   * Last tab gone → quit Chrome. A leftover window reuses the previous
+   * notebook URL on the next ask (wrong notebook tab).
+   */
+  private async maybeCloseSharedContext(): Promise<void> {
+    if (this.sessions.size !== 0) return;
+    log.warning(
+      "🛑 Last session closed — shutting the browser so the next ask opens a fresh window on the requested notebook"
+    );
+    await this.sharedContextManager.closeContext();
   }
 
   /**
@@ -306,6 +320,7 @@ export class SessionManager {
     log.success(
       `✅ Cleaned up ${inactiveSessions.length} sessions (${this.sessions.size}/${this.maxSessions} active)`
     );
+    await this.maybeCloseSharedContext();
     return inactiveSessions.length;
   }
 

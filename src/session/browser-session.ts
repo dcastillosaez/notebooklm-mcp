@@ -18,7 +18,11 @@ import type { SharedContextManager } from "./shared-context-manager.js";
 import type { AuthManager } from "../auth/auth-manager.js";
 import { humanType, randomDelay } from "../utils/stealth-utils.js";
 import { snapshotAllResponses } from "../utils/page-utils.js";
-import { waitForStableAnswer, snapshotPriorAnswers } from "../notebooklm/chat.js";
+import {
+  waitForStableAnswer,
+  snapshotPriorAnswers,
+  sanitizeAnswer,
+} from "../notebooklm/chat.js";
 import {
   extractCitations as extractCitationsFromPage,
   type SourceFormat,
@@ -412,30 +416,21 @@ export class BrowserSession {
         );
       }
 
-      log.info(`  ⌨️  Typing question with human-like behavior...`);
-      await sendProgress?.("Typing question with human-like behavior...", 2, 5);
-      await humanType(page, inputSelector, question, {
-        withTypos: true,
-        wpm: Math.max(CONFIG.typingWpmMin, CONFIG.typingWpmMax),
-      });
+      log.info(`  ⌨️  Pasting question (${question.length} chars)...`);
+      await sendProgress?.("Pasting question...", 2, 5);
+      await humanType(page, inputSelector, question, { withTypos: false });
 
-      // Small pause before submitting
-      await randomDelay(500, 1000);
-
-      // Submit the question (Enter key)
+      // Submit immediately — Angular already has the filled value.
       log.info(`  📤 Submitting question...`);
       await sendProgress?.("Submitting question...", 3, 5);
       await page.keyboard.press("Enter");
-
-      // Small pause after submit
-      await randomDelay(1000, 1500);
 
       // Wait for the response with streaming-stability detection (issue #43).
       // Timeout comes from CONFIG.answerTimeoutMs so users can tune it via
       // ANSWER_TIMEOUT_MS or browser_options.timeout_ms (issue #14, #27).
       log.info(`  ⏳ Waiting for response (streaming-stability)...`);
       await sendProgress?.("Waiting for NotebookLM response (streaming-stability)...", 3, 5);
-      const answer = await waitForStableAnswer(page, {
+      let answer = await waitForStableAnswer(page, {
         question,
         timeoutMs: CONFIG.answerTimeoutMs,
         pollIntervalMs: 750,
@@ -459,6 +454,29 @@ export class BrowserSession {
         } catch (debugErr) {
           log.warning(`  ⚠️  Debug capture failed: ${debugErr}`);
         }
+
+        // The answer can already be on screen while the poll loop missed it
+        // (upstream PR #96). Scan the DOM for the last substantial answer that
+        // is not one we had already seen.
+        //
+        // Normalise with sanitizeAnswer, the same normalisation the poll loop
+        // applies. Comparing merely-trimmed text lets a previous turn through
+        // as if it were new, which is how a stale answer gets reported as a
+        // successful result.
+        log.warning(`  🔎 Poll loop found nothing — scanning the DOM for a settled answer...`);
+        const snapped = await snapshotPriorAnswers(page);
+        const ignore = new Set(existingResponses.map((t) => sanitizeAnswer(t)).filter(Boolean));
+        answer =
+          [...snapped]
+            .reverse()
+            .map((t) => sanitizeAnswer(t))
+            .find((t) => t.length >= 160 && !ignore.has(t)) ?? null;
+        if (answer) {
+          log.success(`  ✅ Recovered the answer from the DOM (${answer.length} chars)`);
+        }
+      }
+
+      if (!answer) {
         throw new Error("Timeout waiting for response from NotebookLM");
       }
 
