@@ -14,6 +14,7 @@
     "prepare": "npm run build",
     "test": "tsx src/index.ts",
     "verify:profile-lock": "node scripts/verify-profile-lock.mjs",
+    "verify:prior-answer-filter": "node scripts/verify-prior-answer-filter.mjs",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",

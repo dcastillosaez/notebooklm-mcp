@@ -238,7 +238,15 @@ export async function waitForStableAnswer(
 
   const deadline = Date.now() + timeoutMs;
   const echoLower = question.trim().toLowerCase();
-  const ignoreSet = new Set(ignoreTexts.map((t) => t.trim()).filter(Boolean));
+  // Normalise prior answers the same way candidates are normalised.
+  // `readLatestAnswer` runs every candidate through `sanitizeAnswer`, so
+  // comparing against merely-trimmed snapshots never matched once an answer
+  // contained Material-icon labels or orphaned citation markers — precisely
+  // what sanitizeAnswer strips. The prior answer then passed the filter and
+  // was returned as if it were the new one: a stale answer reported as
+  // success. Normalising here protects every caller, whatever snapshot
+  // helper they used.
+  const ignoreSet = new Set(ignoreTexts.map((t) => sanitizeAnswer(t)).filter(Boolean));
   // Hard ceiling on poll iterations defends against pathological
   // pollIntervalMs values combined with zombie-page sleep returns (issue #16).
   const maxPolls = Math.max(8, Math.ceil(timeoutMs / Math.max(50, pollIntervalMs)) + 4);
