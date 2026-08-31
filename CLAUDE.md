@@ -89,6 +89,24 @@ decir "el usuario no completó el login". Los errores de infraestructura se
 propagan como excepción: reutilizar `false` para ellos deja al usuario con
 "Authentication failed or was cancelled" y ninguna pista.
 
+**Dos instancias de Claude Code = dos servidores.** Cada ventana de Claude Code
+lanza su propio proceso `dist/index.js`, y todos comparten el mismo
+`chrome_profile` y la misma `library.json`. El primero que abra navegador se
+queda el perfil base; el siguiente cae a un perfil aislado
+(`NOTEBOOK_PROFILE_STRATEGY=auto`), que arranca sin las cookies calientes y
+tarda más. Si algo va raro, comprueba cuántos servidores hay vivos:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" |
+  Where-Object { $_.CommandLine -match 'notebooklm-mcp.*dist' } |
+  Select-Object ProcessId, ParentProcessId
+```
+
+Y ojo con `setup_auth` / `re_auth` en ese escenario: liberan el perfil matando
+lo que lo retenga, así que se llevan por delante los navegadores de la otra
+instancia. Es aceptable (ya borran el estado de auth de todas formas), pero no
+lo lances con trabajo en curso en otra ventana.
+
 ## Cuota
 
 50 consultas al día por cuenta de Google en el plan gratuito (5× con AI
