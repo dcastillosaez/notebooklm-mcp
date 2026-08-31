@@ -21,11 +21,21 @@ import type { SessionInfo } from "../types.js";
 import { randomBytes } from "crypto";
 
 /**
- * Reuse a live session when the caller did not name one. Disable with
- * NOTEBOOK_REUSE_SESSION=false to get an isolated conversation per call.
+ * Reuse a live session when the caller did not name one.
+ *
+ * OFF by default: measured against a real notebook, the second question on a
+ * reused page came back with the *previous* answer's text verbatim, after
+ * waiting ~31s. The submit appears not to reach a chat that already holds a
+ * turn, so `waitForStableAnswer` re-reads the prior answer, sees it hold
+ * steady across polls, and returns it as if it were fresh — a wrong answer
+ * reported as success, which is far worse than paying the page load again.
+ *
+ * Opt in with NOTEBOOK_REUSE_SESSION=true once the second-turn submit is
+ * fixed and verified.
  */
-const REUSE_SESSION_BY_NOTEBOOK =
-  (process.env.NOTEBOOK_REUSE_SESSION ?? "").trim().toLowerCase() !== "false";
+const REUSE_SESSION_BY_NOTEBOOK = ["true", "1", "yes"].includes(
+  (process.env.NOTEBOOK_REUSE_SESSION ?? "").trim().toLowerCase()
+);
 
 
 export class SessionManager {
