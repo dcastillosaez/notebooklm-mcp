@@ -14,22 +14,41 @@ const check = (nombre, ok, detalle = "") => {
   if (!ok) fallos++;
 };
 
-/** Página falsa: devuelve textos de una secuencia, uno por sondeo. */
+/**
+ * Página falsa: devuelve textos de una secuencia, uno por sondeo.
+ *
+ * Tras el PR #86 la lectura es estructural: `page.evaluate` devuelve los hijos
+ * del contenedor y si el textarea sigue deshabilitado. Se simula un turno ya
+ * terminado (`generating: false`) con el texto dentro del visor de respuestas,
+ * que es la señal positiva que usa la capa de aceptación.
+ */
 function fakePage(secuencia) {
   let i = 0;
+  const siguiente = () => {
+    const v = secuencia[Math.min(i, secuencia.length - 1)];
+    i++;
+    return v;
+  };
   return {
     isClosed: () => false,
-    evaluate: async () => true,
     waitForTimeout: async () => {},
-    locator: () => ({
-      last: () => ({
-        innerText: async () => {
-          const v = secuencia[Math.min(i, secuencia.length - 1)];
-          i++;
-          if (v === null) throw new Error("no element");
-          return v;
+    // Un solo argumento => health check de pageIsAlive. Dos => lectura del DOM.
+    evaluate: async (_fn, args) => {
+      if (args === undefined) return true;
+      const texto = siguiente();
+      if (texto === null) return { root: null, generating: false };
+      return {
+        root: {
+          children: [
+            { tagName: "LABS-TAILWIND-DOC-VIEWER", className: "answer", innerText: texto },
+          ],
+          innerText: texto,
         },
-      }),
+        generating: false,
+      };
+    },
+    locator: () => ({
+      last: () => ({ innerText: async () => siguiente() }),
       allInnerTexts: async () => [],
     }),
   };

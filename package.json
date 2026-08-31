@@ -12,7 +12,7 @@
     "watch": "tsc --watch",
     "dev": "tsx watch src/index.ts",
     "prepare": "npm run build",
-    "test": "tsx src/index.ts",
+    "test": "node --import tsx --test test/*.test.ts",
     "verify:profile-lock": "node scripts/verify-profile-lock.mjs",
     "verify:prior-answer-filter": "node scripts/verify-prior-answer-filter.mjs",
     "verify:answer-loop": "node scripts/verify-answer-loop.mjs",
