@@ -23,6 +23,7 @@ import {
   isChannelFailure,
   withChannel,
 } from "../browser/chromium-fallback.js";
+import { isProfileLockFailure, killProfileProcesses } from "../browser/profile-lock.js";
 import {
   humanType,
   randomDelay,
@@ -917,6 +918,13 @@ export class AuthManager {
     const shouldShowBrowser = overrideHeadless !== undefined ? overrideHeadless : true;
 
     try {
+      // CRITICAL: Release the profile BEFORE clearing it. A crashed or
+      // abandoned run leaves the whole Chrome process tree alive, which locks
+      // the profile directory: `clearAllAuthData()` then silently fails to
+      // delete it and `launchPersistentContext` dies with an opaque error.
+      await sendProgress?.("Releasing Chrome profile lock...", 1, 10);
+      await killProfileProcesses(CONFIG.chromeProfileDir);
+
       // CRITICAL: Clear ALL old auth data FIRST (for account switching)
       log.info("🔄 Preparing for new account authentication...");
       await sendProgress?.("Clearing old authentication data...", 1, 10);
@@ -955,6 +963,22 @@ export class AuthManager {
             CONFIG.chromeProfileDir,
             withChannel(baseLaunchOptions, "chromium")
           );
+        } else if (isProfileLockFailure(err)) {
+          // A browser grabbed the profile between the cleanup above and here
+          // (or the first kill pass lost a race). Release it and retry once.
+          log.warning("⚠️  Chrome profile still locked — releasing it and retrying once...");
+          const stillHeld = await killProfileProcesses(CONFIG.chromeProfileDir);
+          if (stillHeld > 0) {
+            throw new Error(
+              `Chrome profile is locked by ${stillHeld} process(es) that could not be terminated. ` +
+                `Close all Chrome windows and retry. Profile: ${CONFIG.chromeProfileDir}`,
+              { cause: err }
+            );
+          }
+          context = await chromium.launchPersistentContext(
+            CONFIG.chromeProfileDir,
+            withChannel(baseLaunchOptions, preferred)
+          );
         } else {
           throw err;
         }
@@ -983,8 +1007,13 @@ export class AuthManager {
 
       return loginSuccess;
     } catch (error) {
+      // Rethrow instead of collapsing to `false`. A `false` return means "the
+      // user did not finish logging in", which the caller reports as
+      // "Authentication failed or was cancelled" — a misleading message for an
+      // infrastructure failure (locked profile, missing browser, bad channel).
+      // Propagating keeps the real cause visible to the caller and the user.
       log.error(`❌ Setup failed: ${error}`);
-      return false;
+      throw error instanceof Error ? error : new Error(String(error));
     }
   }
 

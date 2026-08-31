@@ -477,7 +477,19 @@ export class ToolHandlers {
       await sendProgress?.("Opening browser window...", 2, 10);
 
       // Perform setup with progress updates (uses CONFIG internally)
-      const success = await this.authManager.performSetup(sendProgress);
+      // Pass the resolved visibility through: `performSetup` reads its own
+      // parameter, not CONFIG, so omitting it silently ignored show_browser
+      // and browser_options.show. Only forward it when the caller actually
+      // asked — otherwise leave it undefined so setup keeps its "visible by
+      // default" behaviour instead of inheriting the headless runtime CONFIG.
+      const visibilityRequested =
+        show_browser !== undefined ||
+        browser_options?.show !== undefined ||
+        browser_options?.headless !== undefined;
+      const success = await this.authManager.performSetup(
+        sendProgress,
+        visibilityRequested ? !effectiveConfig.headless : undefined
+      );
 
       const durationSeconds = (Date.now() - startTime) / 1000;
 
@@ -571,7 +583,19 @@ export class ToolHandlers {
       // 3. Perform fresh setup
       await sendProgress?.("Starting fresh authentication...", 3, 12);
       log.info("  🌐 Starting fresh authentication setup...");
-      const success = await this.authManager.performSetup(sendProgress);
+      // Pass the resolved visibility through: `performSetup` reads its own
+      // parameter, not CONFIG, so omitting it silently ignored show_browser
+      // and browser_options.show. Only forward it when the caller actually
+      // asked — otherwise leave it undefined so setup keeps its "visible by
+      // default" behaviour instead of inheriting the headless runtime CONFIG.
+      const visibilityRequested =
+        show_browser !== undefined ||
+        browser_options?.show !== undefined ||
+        browser_options?.headless !== undefined;
+      const success = await this.authManager.performSetup(
+        sendProgress,
+        visibilityRequested ? !effectiveConfig.headless : undefined
+      );
 
       const durationSeconds = (Date.now() - startTime) / 1000;
 
@@ -1029,9 +1053,7 @@ export class ToolHandlers {
       // `started` and `in_progress` count as success — the generation is on
       // its way; the caller polls `get_audio_status` for completion.
       const ok =
-        result.status === "ready" ||
-        result.status === "started" ||
-        result.status === "in_progress";
+        result.status === "ready" || result.status === "started" || result.status === "in_progress";
       return { success: ok, data: { result } };
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error);
