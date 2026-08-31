@@ -15,6 +15,8 @@
     "test": "tsx src/index.ts",
     "verify:profile-lock": "node scripts/verify-profile-lock.mjs",
     "verify:prior-answer-filter": "node scripts/verify-prior-answer-filter.mjs",
+    "verify:answer-loop": "node scripts/verify-answer-loop.mjs",
+    "verify": "npm run verify:prior-answer-filter && npm run verify:answer-loop && npm run verify:profile-lock",
     "lint": "eslint src",
     "lint:fix": "eslint src --fix",
     "format": "prettier --write src",

@@ -6,7 +6,11 @@ import { chromium } from "patchright";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { findProfileProcesses, killProfileProcesses } from "../dist/browser/profile-lock.js";
+import {
+  findProfileProcesses,
+  killProfileProcesses,
+  isProfileLockFailure,
+} from "../dist/browser/profile-lock.js";
 
 const TEST_PROFILE = path.join(os.tmpdir(), "nlm-lock-test-profile");
 fs.rmSync(TEST_PROFILE, { recursive: true, force: true });
@@ -16,6 +20,24 @@ const check = (name, ok) => {
   console.log(`${ok ? "PASS" : "FAIL"}: ${name}`);
   if (!ok) failures++;
 };
+
+// 0. Deteccion del error de perfil bloqueado (unitario, sin navegador)
+const casosLock = [
+  ["ProcessSingleton: failed to create lock", true],
+  ["SingletonLock present", true],
+  ["The profile is already in use", true],
+  ["Target page, context or browser has been closed", true],
+  ["Browser closed unexpectedly exitCode=21", true],
+  ["failed with code: 21", true],
+  // No debe confundirse con otros fallos: si tragase el error de canal,
+  // cortocircuitaria el fallback a Chromium empaquetado.
+  ["Chromium distribution 'chrome' is not found at /usr/bin", false],
+  ["ENOENT: no such file or directory", false],
+  ["net::ERR_INTERNET_DISCONNECTED", false],
+];
+for (const [msg, esperado] of casosLock) {
+  check(`lock=${esperado} en "${msg.slice(0, 40)}"`, isProfileLockFailure(new Error(msg)) === esperado);
+}
 
 // 1. Sin procesos → lista vacía
 check("perfil limpio => 0 procesos", (await findProfileProcesses(TEST_PROFILE)).length === 0);
