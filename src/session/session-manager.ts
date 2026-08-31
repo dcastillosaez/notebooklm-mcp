@@ -20,6 +20,14 @@ import { log } from "../utils/logger.js";
 import type { SessionInfo } from "../types.js";
 import { randomBytes } from "crypto";
 
+/**
+ * Reuse a live session when the caller did not name one. Disable with
+ * NOTEBOOK_REUSE_SESSION=false to get an isolated conversation per call.
+ */
+const REUSE_SESSION_BY_NOTEBOOK =
+  (process.env.NOTEBOOK_REUSE_SESSION ?? "").trim().toLowerCase() !== "false";
+
+
 export class SessionManager {
   private authManager: AuthManager;
   private sharedContextManager: SharedContextManager;
@@ -78,6 +86,7 @@ export class SessionManager {
     }
 
     // Generate ID if not provided
+    const sessionIdWasRequested = Boolean(sessionId);
     if (!sessionId) {
       sessionId = this.generateSessionId();
       log.info(`🆕 Auto-generated session ID: ${sessionId}`);
@@ -111,6 +120,22 @@ export class SessionManager {
         session.updateActivity();
         log.success(`♻️  Reusing existing session ${sessionId}`);
         return session;
+      }
+    }
+
+    // No specific session was asked for: reuse a live one for the same
+    // notebook rather than paying the page load again. Opening a notebook
+    // costs ~10-15s, and without this every call spawns another browser page
+    // for a notebook that is already open. NotebookLM is conversational, so
+    // the carried-over context also sharpens follow-ups — at the cost of the
+    // previous turn colouring an unrelated question. Set
+    // NOTEBOOK_REUSE_SESSION=false for a fresh conversation every time.
+    if (!sessionIdWasRequested && REUSE_SESSION_BY_NOTEBOOK) {
+      const reusable = this.findLiveSessionForNotebook(targetUrl);
+      if (reusable) {
+        reusable.updateActivity();
+        log.success(`♻️  Reusing session ${reusable.sessionId} already open on this notebook`);
+        return reusable;
       }
     }
 
@@ -206,6 +231,31 @@ export class SessionManager {
     }
 
     return closed;
+  }
+
+  /**
+   * Most recently active live session pointing at `notebookUrl`, if any.
+   *
+   * Expired sessions are skipped so a reused one is never about to be swept
+   * by the cleanup timer, and dead pages are skipped because recovering one
+   * costs as much as opening a fresh session.
+   */
+  private findLiveSessionForNotebook(notebookUrl: string): BrowserSession | undefined {
+    let best: BrowserSession | undefined;
+    let bestActivity = -1;
+
+    for (const session of this.sessions.values()) {
+      if (session.notebookUrl !== notebookUrl) continue;
+      if (session.isExpired(this.sessionTimeout)) continue;
+      if (!session.isAlive()) continue;
+
+      const activity = session.getInfo().last_activity;
+      if (activity > bestActivity) {
+        bestActivity = activity;
+        best = session;
+      }
+    }
+    return best;
   }
 
   /**

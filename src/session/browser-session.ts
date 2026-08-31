@@ -838,6 +838,17 @@ export class BrowserSession {
   }
 
   /**
+   * Whether this session still has a usable page.
+   *
+   * `ask()` can recover a closed page on its own, so this is a hint for
+   * callers deciding whether reusing the session is worthwhile — not a
+   * correctness guard.
+   */
+  isAlive(): boolean {
+    return this.initialized && this.page !== null && !this.isPageClosedSafe();
+  }
+
+  /**
    * Check if session has expired (inactive for too long).
    *
    * A session that never produced an answer expires far sooner. These are
