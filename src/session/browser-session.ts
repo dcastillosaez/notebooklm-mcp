@@ -40,6 +40,16 @@ import {
 import { CONFIG } from "../config.js";
 import path from "node:path";
 import { Selectors } from "../notebooklm/selectors.js";
+
+/**
+ * Inactivity budget for a session that has never produced an answer.
+ * Overridable via `NOTEBOOK_EMPTY_SESSION_TIMEOUT_S`; set high to restore the
+ * old behaviour of treating empty sessions like any other.
+ */
+const EMPTY_SESSION_TIMEOUT_S = (() => {
+  const raw = Number.parseInt(process.env.NOTEBOOK_EMPTY_SESSION_TIMEOUT_S ?? "", 10);
+  return Number.isInteger(raw) && raw > 0 ? raw : 120;
+})();
 import { log } from "../utils/logger.js";
 import type { SessionInfo, ProgressCallback } from "../types.js";
 import { RateLimitError } from "../errors.js";
@@ -828,11 +838,20 @@ export class BrowserSession {
   }
 
   /**
-   * Check if session has expired (inactive for too long)
+   * Check if session has expired (inactive for too long).
+   *
+   * A session that never produced an answer expires far sooner. These are
+   * almost always abandoned work: the caller aborted `ask_question` after the
+   * browser had already opened and loaded the notebook, so the session sits
+   * there holding a browser page with nothing in it. Keeping them for the full
+   * timeout wastes memory and burns the `maxSessions` budget — enough aborted
+   * calls and the next legitimate one fails with "Max sessions reached".
    */
   isExpired(timeoutSeconds: number): boolean {
     const inactiveSeconds = (Date.now() - this.lastActivity) / 1000;
-    return inactiveSeconds > timeoutSeconds;
+    const effectiveTimeout =
+      this.messageCount === 0 ? Math.min(timeoutSeconds, EMPTY_SESSION_TIMEOUT_S) : timeoutSeconds;
+    return inactiveSeconds > effectiveTimeout;
   }
 
   /**
