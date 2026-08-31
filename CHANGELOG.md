@@ -45,6 +45,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `npm run verify:profile-lock` — verifies detection and release against a
   throwaway profile, without touching the real one.
 
+### Changed
+
+- **`ask_question` reuses a live session for the same notebook** when no
+  `session_id` is given, instead of opening another browser page each time.
+  Verified end to end: six questions across two notebooks used two sessions
+  rather than six pages, each answered its own question, and an A → B → A
+  sequence showed no bleed between notebooks. Set
+  `NOTEBOOK_REUSE_SESSION=false` for an isolated conversation per call.
+
 ### Fixed (upstream PR #96)
 
 - **Long `ask_question` prompts no longer type character-by-character via `page.fill`.** Playwright `fill` select-alls the field on every key, so a 500–4000 character research question looked like paste/select/paste for 1–3 minutes. Prompts ≥ 40 characters (or containing a newline) are pasted once. Keystroke stealth remains for short login fields.
