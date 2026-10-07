@@ -419,3 +419,9 @@ v2 changes the following defaults — adjust if you depended on v1 behaviour:
 ## License
 
 MIT. See [LICENSE](./LICENSE).
+
+## Historial de fallos del fork (Windows)
+
+**Fallo histórico ya arreglado (2026-08-18)**: `ask_question` del MCP fallaba con `Timeout waiting for response` o colgaba sin error. La causa real: cada intento fallido dejaba procesos `chrome.exe` huérfanos bloqueando el perfil persistente (`...\notebooklm-mcp\Data\chrome_profile`), y el código de fallback a perfil aislado (`shared-context-manager.ts`) tenía una regex que no reconocía el error real de Windows (`exitCode=21` / "Target page, context or browser has been closed"), así que el fallback nunca se activaba. Se ampliaron esas regex (`chromium-fallback.ts` e `isSingleton` en `shared-context-manager.ts`) y se instaló el Chromium empaquetado de `patchright` que faltaba (`npx patchright install chromium` dentro de la carpeta del MCP) para que la ruta de recuperación tenga un navegador disponible. Verificado bloqueando el perfil a propósito: ahora se recupera solo y responde en ~14s.
+
+**Segundo fallo del mismo origen, arreglado (2026-08-31)**: el parche de 2026-08-18 cubría solo el runtime (`ask_question`), no `setup_auth` / `re_auth`. Con el perfil bloqueado por procesos huérfanos, `performSetup` moría dentro de `launchPersistentContext` y su `catch` convertía cualquier error en `false`, así que siempre devolvía "Authentication failed or was cancelled" en ~2 segundos, sin pista alguna. Arreglado en el fork con `src/browser/profile-lock.ts`: libera el perfil antes de usarlo, reintenta una vez y propaga el error real. Ojo con dos detalles que costaron un falso positivo: el proceso huérfano típico es `headless_shell.exe` (no `chrome.exe`), y en Windows hay que comparar la ruta resuelta además de la literal porque los paths cortos 8.3 (`DAVIDG~1`) nunca casan.
